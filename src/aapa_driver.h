@@ -4,8 +4,22 @@
 #include <libindi/defaultdevice.h>
 #include <libindi/inditimer.h>
 
+// Detect new AlignmentCorrectionInterface (INDI >= 2.1.0, PR #2342)
+#if __has_include(<libindi/indialignmentcorrectioninterface.h>)
+#include <libindi/indialignmentcorrectioninterface.h>
+#define HAVE_ALIGNMENT_CORRECTION_INTERFACE 1
+#endif
+
 class AAPA : public INDI::DefaultDevice
+#ifdef HAVE_ALIGNMENT_CORRECTION_INTERFACE
+    , public INDI::AlignmentCorrectionInterface
+#endif
 {
+    // Alias for shorter notation in .cpp
+#ifdef HAVE_ALIGNMENT_CORRECTION_INTERFACE
+    using ACI = INDI::AlignmentCorrectionInterface;
+#endif
+
 public:
     AAPA();
     virtual ~AAPA() = default;
@@ -26,9 +40,16 @@ protected:
     virtual void TimerHit() override;
     virtual bool Handshake();
 
+#ifdef HAVE_ALIGNMENT_CORRECTION_INTERFACE
+    // From AlignmentCorrectionInterface
+    virtual IPState StartCorrection(double azError, double altError) override;
+    virtual IPState AbortCorrection() override;
+#endif
+
 private:
     bool updateDeviceStatus();
     void sendCommand(const char *cmd);
+    void jogAxis(const char *axis, double units, double speed);
 
     // Number properties for actual positions
     INumberVectorProperty PositionNP;
@@ -42,6 +63,10 @@ private:
     INumberVectorProperty SpeedNP;
     INumber SpeedN[1];
 
+    // Number property for Steps-Per-Degree calibration
+    INumberVectorProperty StepsPerDegNP;
+    INumber StepsPerDegN[2];
+
     // Switch property to stop motion
     ISwitchVectorProperty AbortSP;
     ISwitch AbortS[1];
@@ -50,6 +75,9 @@ private:
     IText PortT[1];
 
     int PortFD;
+
+    // Tracking correction state
+    bool m_CorrectionInProgress{false};
 };
 
 #endif // AAPA_DRIVER_H

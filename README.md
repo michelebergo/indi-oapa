@@ -8,11 +8,13 @@ An [INDI](https://www.indilib.org/) driver for the **AAPA** (Automated Astronomi
 
 ## Features
 
+- **Ekos Native PAC Support** *(INDI ≥ 2.1.0)* — Implements the standard `AlignmentCorrectionInterface` so Ekos can drive corrections directly
 - **Manual Jog Control** — Command azimuth (X) and altitude (Y) motor axes from Ekos / any INDI client
+- **Calibration Property** — Configure Steps-Per-Degree for each axis from the INDI control panel
 - **Adjustable Speed** — Set the feed rate to match your mount's adjustment sensitivity
 - **Abort Button** — Emergency stop for all motion
 - **Live Position Readout** — Real-time motor position reported back to the client
-- **Closed-Loop Automation** *(experimental)* — Script that reads Ekos polar alignment error and automatically corrects it
+- **Closed-Loop Script** *(legacy fallback)* — Shell script bridge for older INDI versions
 
 ---
 
@@ -72,44 +74,49 @@ Once connected you will see:
 | **Position** | Current X (azimuth) and Y (altitude) in motor steps |
 | **Jog** | Enter a relative movement value and press Set |
 | **Speed** | Feed rate in mm/min (default: 500) |
+| **Calibration** | Steps-per-degree for azimuth and altitude axes |
 | **Abort** | Emergency stop |
+
+> With **INDI ≥ 2.1.0**, you will also see the **Alignment Correction** controls (Correct/Abort, Error values, Status light) — these are driven automatically by Ekos PAA.
 
 ---
 
-## Closed-Loop Automation *(Experimental)*
+## Ekos Native PAC Integration *(INDI ≥ 2.1.0)*
 
-The included `aapa_closed_loop.sh` script can automatically correct polar alignment errors detected by Ekos.
+If built against INDI 2.1.0+ (which includes the `AlignmentCorrectionInterface`), the driver works as a native **Polar Alignment Corrector** device. Ekos's Polar Alignment Assistant will:
 
-### How It Works
+1. Send the measured AZ/ALT error in degrees directly to the driver
+2. The driver converts degrees to motor jog units using the **Calibration** property
+3. Motors execute the correction
+4. The driver reports completion when Grbl returns to Idle
 
-1. Ekos captures a plate-solve and computes alt/az polar alignment error
-2. The script reads the error values via INDI
-3. It converts degrees of error into motor jog units
-4. It sends correction commands to the AAPA driver
-5. It waits for a new solve and repeats until the error is below threshold
+No scripts needed — just set the **Calibration** values and let Ekos handle everything.
 
-### Setup
+---
+
+## Closed-Loop Script *(Legacy Fallback)*
+
+For INDI < 2.1.0, the `aapa_closed_loop.sh` script provides the same automation:
 
 1. Edit the calibration constants in `aapa_closed_loop.sh`:
 
 ```bash
-# Motor units per degree of error — calibrate for YOUR mount
 STEPS_PER_DEG_AZ=50
 STEPS_PER_DEG_ALT=50
-
-# Stop correcting below this threshold (degrees)
 THRESHOLD_DEG=0.01
 ```
 
-2. In Profile Editor → Scripts → Post-Startup, point to `auto_aapa.sh` (installed in `/usr/local/bin/`).
+2. In Profile Editor → Scripts → Post-Startup, point to `auto_aapa.sh`.
 
-### Calibrating STEPS_PER_DEG
+---
+
+## Calibrating Steps-Per-Degree
 
 1. Use Ekos Polar Alignment to measure the current error (e.g. 0.5° in azimuth)
 2. Manually jog the AAPA by a known amount (e.g. 25 units)
 3. Re-solve and measure the new error
 4. Calculate: `STEPS_PER_DEG = jog_units / degrees_corrected`
-5. Update the value in the script
+5. Set the values in the driver's **Calibration** property (or in the script for legacy mode)
 
 ---
 

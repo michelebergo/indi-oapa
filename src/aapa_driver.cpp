@@ -17,9 +17,12 @@
 static std::unique_ptr<AAPA> aapaDevice(new AAPA());
 
 AAPA::AAPA()
+#ifdef HAVE_ALIGNMENT_CORRECTION_INTERFACE
+    : ACI(this)
+#endif
 {
     PortFD = -1;
-    setVersion(1, 0);
+    setVersion(1, 1);
 }
 
 const char *AAPA::getDefaultName()
@@ -31,6 +34,14 @@ bool AAPA::initProperties()
 {
     // Initialize standard properties
     INDI::DefaultDevice::initProperties();
+
+#ifdef HAVE_ALIGNMENT_CORRECTION_INTERFACE
+    // Initialize PAC interface properties
+    ACI::initProperties(MAIN_CONTROL_TAB);
+
+    // Register as Auxiliary + Alignment Correction device
+    setDriverInterface(AUX_INTERFACE | ALIGNMENT_CORRECTION_INTERFACE);
+#endif
 
     // Position (Read Only)
     IUFillNumber(&PositionN[0], "X_POS", "Azimuth", "%6.2f", 0, 10000, 0, 0);
@@ -45,6 +56,12 @@ bool AAPA::initProperties()
     // Speed setting
     IUFillNumber(&SpeedN[0], "JOG_SPEED", "Speed", "%6.0f", 1, 10000, 0, 500);
     IUFillNumberVector(&SpeedNP, SpeedN, 1, getDeviceName(), "AAPA_SPEED", "Speed Configuration", MAIN_CONTROL_TAB, IP_RW, 0, IPS_IDLE);
+
+    // Steps-per-degree calibration
+    IUFillNumber(&StepsPerDegN[0], "AZ_STEPS", "Azimuth Steps/Deg", "%6.1f", 0.1, 10000, 1, 50);
+    IUFillNumber(&StepsPerDegN[1], "ALT_STEPS", "Altitude Steps/Deg", "%6.1f", 0.1, 10000, 1, 50);
+    IUFillNumberVector(&StepsPerDegNP, StepsPerDegN, 2, getDeviceName(), "AAPA_STEPS_PER_DEG",
+                       "Calibration", MAIN_CONTROL_TAB, IP_RW, 0, IPS_IDLE);
 
     // Abort button
     IUFillSwitch(&AbortS[0], "ABORT", "Abort", ISS_OFF);
@@ -69,6 +86,7 @@ void AAPA::ISGetProperties(const char *dev)
         defineProperty(&PositionNP);
         defineProperty(&JogNP);
         defineProperty(&SpeedNP);
+        defineProperty(&StepsPerDegNP);
         defineProperty(&AbortSP);
     }
     defineProperty(&PortTP);
@@ -82,13 +100,19 @@ bool AAPA::updateProperties()
         defineProperty(&PositionNP);
         defineProperty(&JogNP);
         defineProperty(&SpeedNP);
+        defineProperty(&StepsPerDegNP);
         defineProperty(&AbortSP);
     } else {
         deleteProperty(PositionNP.name);
         deleteProperty(JogNP.name);
         deleteProperty(SpeedNP.name);
+        deleteProperty(StepsPerDegNP.name);
         deleteProperty(AbortSP.name);
     }
+
+#ifdef HAVE_ALIGNMENT_CORRECTION_INTERFACE
+    ACI::updateProperties();
+#endif
     
     return true;
 }
@@ -97,6 +121,7 @@ bool AAPA::saveConfigItems(FILE *fp)
 {
     INDI::DefaultDevice::saveConfigItems(fp);
     IUSaveConfigNumber(fp, &SpeedNP);
+    IUSaveConfigNumber(fp, &StepsPerDegNP);
     IUSaveConfigText(fp, &PortTP);
     return true;
 }
@@ -133,6 +158,8 @@ bool AAPA::Connect()
 
 bool AAPA::Disconnect()
 {
+    m_CorrectionInProgress = false;
+
     if (PortFD > 0) {
         tty_disconnect(PortFD);
         PortFD = -1;
@@ -182,6 +209,14 @@ void AAPA::sendCommand(const char *cmd)
     tty_write(PortFD, sendBuf, strlen(sendBuf), &nbytes);
 }
 
+void AAPA::jogAxis(const char *axis, double units, double speed)
+{
+    char cmd[128];
+    snprintf(cmd, sizeof(cmd), "$J=G91G21%s%.2fF%.0f", axis, units, speed);
+    sendCommand(cmd);
+    LOGF_INFO("Jogging %s: %.2f at F%.0f", axis, units, speed);
+}
+
 bool AAPA::updateDeviceStatus()
 {
     if (PortFD < 0) return false;
@@ -198,6 +233,9 @@ bool AAPA::updateDeviceStatus()
         
         // Typical GRBL status: <Idle|MPos:0.000,0.000,0.000|...>
         if (buf[0] == '<') {
+            // Check if Grbl is Idle (needed for correction completion)
+            bool isIdle = (strstr(buf, "Idle") != nullptr);
+
             char *mpos = strstr(buf, "MPos:");
             if (mpos) {
                 float x = 0, y = 0, z = 0;
@@ -206,9 +244,22 @@ bool AAPA::updateDeviceStatus()
                     PositionN[1].value = y;
                     
                     IDSetNumber(&PositionNP, nullptr);
-                    return true;
                 }
             }
+
+#ifdef HAVE_ALIGNMENT_CORRECTION_INTERFACE
+            // If a correction was in progress and Grbl is now idle, report completion
+            if (m_CorrectionInProgress && isIdle) {
+                m_CorrectionInProgress = false;
+                LOG_INFO("Alignment correction completed successfully.");
+                CorrectionSP.setState(IPS_OK);
+                CorrectionSP.reset();
+                CorrectionSP.apply();
+                CorrectionStatusLP[0].setState(IPS_OK);
+                CorrectionStatusLP.apply();
+            }
+#endif
+            return true;
         }
     }
     
@@ -230,6 +281,12 @@ bool AAPA::ISNewNumber(const char *dev, const char *name, double values[], char 
     if (strcmp(dev, getDeviceName()) != 0)
         return false;
 
+#ifdef HAVE_ALIGNMENT_CORRECTION_INTERFACE
+    // Delegate to AlignmentCorrectionInterface first
+    if (ACI::processNumber(dev, name, values, names, n))
+        return true;
+#endif
+
     if (strcmp(name, JogNP.name) == 0) {
         JogNP.s = IPS_BUSY;
         IDSetNumber(&JogNP, nullptr);
@@ -248,19 +305,11 @@ bool AAPA::ISNewNumber(const char *dev, const char *name, double values[], char 
         
         double speed = SpeedN[0].value;
         
-        char cmd[128] = {0};
+        if (x_jog != 0)
+            jogAxis("X", x_jog, speed);
         
-        if (x_jog != 0) {
-            snprintf(cmd, sizeof(cmd), "$J=G91G21X%.2fF%.0f", x_jog, speed);
-            sendCommand(cmd);
-            LOGF_INFO("Jogging X: %.2f at %.0f", x_jog, speed);
-        }
-        
-        if (y_jog != 0) {
-            snprintf(cmd, sizeof(cmd), "$J=G91G21Y%.2fF%.0f", y_jog, speed);
-            sendCommand(cmd);
-            LOGF_INFO("Jogging Y: %.2f at %.0f", y_jog, speed);
-        }
+        if (y_jog != 0)
+            jogAxis("Y", y_jog, speed);
         
         JogNP.s = IPS_OK;
         IDSetNumber(&JogNP, nullptr);
@@ -275,6 +324,15 @@ bool AAPA::ISNewNumber(const char *dev, const char *name, double values[], char 
         return true;
     }
 
+    if (strcmp(name, StepsPerDegNP.name) == 0) {
+        IUUpdateNumber(&StepsPerDegNP, values, names, n);
+        StepsPerDegNP.s = IPS_OK;
+        IDSetNumber(&StepsPerDegNP, nullptr);
+        LOGF_INFO("Calibration updated: Az=%.1f Alt=%.1f steps/deg",
+                  StepsPerDegN[0].value, StepsPerDegN[1].value);
+        return true;
+    }
+
     return INDI::DefaultDevice::ISNewNumber(dev, name, values, names, n);
 }
 
@@ -282,6 +340,12 @@ bool AAPA::ISNewSwitch(const char *dev, const char *name, ISState *states, char 
 {
     if (strcmp(dev, getDeviceName()) != 0)
         return false;
+
+#ifdef HAVE_ALIGNMENT_CORRECTION_INTERFACE
+    // Delegate to AlignmentCorrectionInterface first
+    if (ACI::processSwitch(dev, name, states, names, n))
+        return true;
+#endif
 
     if (strcmp(name, AbortSP.name) == 0) {
         IUUpdateSwitch(&AbortSP, states, names, n);
@@ -294,6 +358,7 @@ bool AAPA::ISNewSwitch(const char *dev, const char *name, ISState *states, char 
             char resetCmd[2] = {0x18, 0};
             sendCommand(resetCmd);
             
+            m_CorrectionInProgress = false;
             LOG_INFO("Motion aborted.");
             
             AbortS[0].s = ISS_OFF;
@@ -321,3 +386,67 @@ bool AAPA::ISNewText(const char *dev, const char *name, char *texts[], char *nam
 
     return INDI::DefaultDevice::ISNewText(dev, name, texts, names, n);
 }
+
+// ═══════════════════════════════════════════════════════════════
+//  AlignmentCorrectionInterface Implementation
+// ═══════════════════════════════════════════════════════════════
+
+#ifdef HAVE_ALIGNMENT_CORRECTION_INTERFACE
+
+IPState AAPA::StartCorrection(double azError, double altError)
+{
+    if (!isConnected()) {
+        LOG_ERROR("Cannot start correction: not connected.");
+        return IPS_ALERT;
+    }
+
+    if (m_CorrectionInProgress) {
+        LOG_WARN("Correction already in progress.");
+        return IPS_BUSY;
+    }
+
+    double stepsAz  = StepsPerDegN[0].value;
+    double stepsAlt = StepsPerDegN[1].value;
+    double speed    = SpeedN[0].value;
+
+    // Convert error in degrees to motor jog units
+    // Negative sign: we want to CORRECT the error, not add to it
+    double jogAz  = -azError  * stepsAz;
+    double jogAlt = -altError * stepsAlt;
+
+    LOGF_INFO("Starting alignment correction: Az error=%.4f° (jog %.2f), Alt error=%.4f° (jog %.2f)",
+              azError, jogAz, altError, jogAlt);
+
+    if (fabs(jogAz) > 0.01)
+        jogAxis("X", jogAz, speed);
+
+    if (fabs(jogAlt) > 0.01)
+        jogAxis("Y", jogAlt, speed);
+
+    m_CorrectionInProgress = true;
+
+    // TimerHit/updateDeviceStatus will detect Grbl Idle state
+    // and set CorrectionSP/CorrectionStatusLP to OK automatically
+    return IPS_BUSY;
+}
+
+IPState AAPA::AbortCorrection()
+{
+    if (!isConnected()) {
+        LOG_ERROR("Cannot abort: not connected.");
+        return IPS_ALERT;
+    }
+
+    // GRBL feed-hold + soft-reset
+    sendCommand("!");
+    usleep(50000);
+    char resetCmd[2] = {0x18, 0};
+    sendCommand(resetCmd);
+
+    m_CorrectionInProgress = false;
+    LOG_INFO("Alignment correction aborted.");
+
+    return IPS_OK;
+}
+
+#endif // HAVE_ALIGNMENT_CORRECTION_INTERFACE
