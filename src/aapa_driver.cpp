@@ -64,6 +64,12 @@ bool AAPA::initProperties()
     IUFillNumberVector(&StepsPerDegNP, StepsPerDegN, 2, getDeviceName(), "AAPA_STEPS_PER_DEG",
                        "Calibration", MAIN_CONTROL_TAB, IP_RW, 0, IPS_IDLE);
 
+    // PAA Error Input: write Ekos PAA result here to trigger auto-correction
+    IUFillNumber(&PAAErrorN[0], "AZ_ERR", "Azimuth Error (deg)", "%.6f", -180, 180, 0, 0);
+    IUFillNumber(&PAAErrorN[1], "ALT_ERR", "Altitude Error (deg)", "%.6f", -90, 90, 0, 0);
+    IUFillNumberVector(&PAAErrorNP, PAAErrorN, 2, getDeviceName(), "AAPA_PAA_ERROR",
+                       "PAA Error Input", MAIN_CONTROL_TAB, IP_WO, 0, IPS_IDLE);
+
     // Abort button
     IUFillSwitch(&AbortS[0], "ABORT", "Abort", ISS_OFF);
     IUFillSwitchVector(&AbortSP, AbortS, 1, getDeviceName(), "AAPA_ABORT", "Abort Motion", MAIN_CONTROL_TAB, IP_WO, ISR_ATMOST1, 0, IPS_IDLE);
@@ -88,6 +94,7 @@ void AAPA::ISGetProperties(const char *dev)
         defineProperty(&JogNP);
         defineProperty(&SpeedNP);
         defineProperty(&StepsPerDegNP);
+        defineProperty(&PAAErrorNP);
         defineProperty(&AbortSP);
     }
     defineProperty(&PortTP);
@@ -108,6 +115,7 @@ bool AAPA::updateProperties()
         deleteProperty(JogNP.name);
         deleteProperty(SpeedNP.name);
         deleteProperty(StepsPerDegNP.name);
+        deleteProperty(PAAErrorNP.name);
         deleteProperty(AbortSP.name);
     }
 
@@ -337,6 +345,27 @@ bool AAPA::ISNewNumber(const char *dev, const char *name, double values[], char 
         IDSetNumber(&StepsPerDegNP, nullptr);
         LOGF_INFO("Calibration updated: Az=%.1f Alt=%.1f steps/deg",
                   StepsPerDegN[0].value, StepsPerDegN[1].value);
+        return true;
+    }
+
+    // PAA Error: convert degrees to steps and auto-correct
+    if (strcmp(name, PAAErrorNP.name) == 0) {
+        double az_err = 0, alt_err = 0;
+        for (int i = 0; i < n; i++) {
+            if (strcmp(names[i], "AZ_ERR") == 0) az_err = values[i];
+            else if (strcmp(names[i], "ALT_ERR") == 0) alt_err = values[i];
+        }
+        double az_steps  = -az_err  * StepsPerDegN[0].value;
+        double alt_steps = -alt_err * StepsPerDegN[1].value;
+        double speed = SpeedN[0].value;
+        LOGF_INFO("PAA correction: az_err=%.4f deg -> %.0f steps | alt_err=%.4f deg -> %.0f steps",
+                  az_err, az_steps, alt_err, alt_steps);
+        PAAErrorNP.s = IPS_BUSY;
+        IDSetNumber(&PAAErrorNP, nullptr);
+        if (az_steps != 0)  jogAxis("X", az_steps, speed);
+        if (alt_steps != 0) jogAxis("Y", alt_steps, speed);
+        PAAErrorNP.s = IPS_OK;
+        IDSetNumber(&PAAErrorNP, nullptr);
         return true;
     }
 

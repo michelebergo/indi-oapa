@@ -67,6 +67,10 @@ private:
     INumberVectorProperty StepsPerDegNP;
     INumber StepsPerDegN[2];
 
+    // Writable PAA error input (degrees) — write AZ_ERR + ALT_ERR to trigger auto-correction
+    INumberVectorProperty PAAErrorNP;
+    INumber PAAErrorN[2];
+
     // Switch property to stop motion
     ISwitchVectorProperty AbortSP;
     ISwitch AbortS[1];
