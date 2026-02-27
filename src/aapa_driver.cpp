@@ -5,6 +5,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <math.h>
+#include <termios.h>
 
 #include <libindi/indicom.h>
 #include <libindi/inditimer.h>
@@ -138,8 +139,8 @@ bool AAPA::Connect()
     }
     LOG_INFO("Serial connection opened, waiting for Arduino reset...");
     
-    // Wait for 1.5s after connection to allow Arduino Grbl firmware to reset
-    usleep(1500000);
+    // Wait for 3.0s after connection to allow Arduino Grbl firmware/ESP32 to reset
+    usleep(3000000);
     
     // Confirm connection
     if (!Handshake()) {
@@ -171,22 +172,28 @@ bool AAPA::Disconnect()
 
 bool AAPA::Handshake()
 {
-    char buf[128];
+    char buf[512];
     int nbytes = 0;
     
+    // Purge any stale data from serial buffer instead of blocking read loop
+    tcflush(PortFD, TCIOFLUSH);
+
     // Send standard GRBL reset/status command
     LOG_INFO("Sending ? to initiate handshake");
     sendCommand("?");
     
     // Wait for response, reading chunks since Grbl prints a welcome message sometimes
     int totalBytes = 0;
-    while(totalBytes < (int)sizeof(buf) - 1) {
+    int retries = 50; // Max 50 chunks to prevent infinite loop
+    while(totalBytes < (int)sizeof(buf) - 2 && retries-- > 0) {
         int bytes_read = 0;
         if (tty_read(PortFD, buf + totalBytes, 1, 1, &bytes_read) == TTY_OK && bytes_read > 0) {
              totalBytes += bytes_read;
              buf[totalBytes] = '\0';
              if (strstr(buf, "<") != nullptr) {
                  LOGF_INFO("Handshake success, received: %s", buf);
+                 // clear remaining buffer
+                 tcflush(PortFD, TCIOFLUSH);
                  return true;
              }
         } else {

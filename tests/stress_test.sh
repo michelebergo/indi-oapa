@@ -138,7 +138,7 @@ else
 fi
 
 # Check properties are exposed
-PROPS=$(indi_getprop -1 -t 3 -p $INDI_PORT "$DEVICE.*" 2>/dev/null | head -20)
+PROPS=$(indi_getprop -t 3 -p $INDI_PORT "$DEVICE.*" 2>/dev/null | head -20)
 if [ -n "$PROPS" ]; then
     PROP_COUNT=$(echo "$PROPS" | wc -l)
     pass "Driver exposes $PROP_COUNT properties"
@@ -356,7 +356,7 @@ for client in $(seq 1 5); do
         end=$((SECONDS + DURATION_PER_TEST))
         count=0
         while [ $SECONDS -lt $end ]; do
-            indi_getprop -1 -t 1 -p $INDI_PORT "$DEVICE.*" &>/dev/null
+            indi_getprop -t 1 -p $INDI_PORT "$DEVICE.*" &>/dev/null
             ((count++))
         done
         echo "$count" > "/tmp/aapa_client_${client}.count"
