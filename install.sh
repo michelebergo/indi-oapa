@@ -48,7 +48,7 @@ echo -e "${YELLOW}[2/4] Building driver...${NC}"
 rm -rf "$BUILD_DIR"
 mkdir -p "$BUILD_DIR"
 cd "$BUILD_DIR"
-cmake ..
+cmake -DCMAKE_INSTALL_PREFIX=/usr ..
 make -j$(nproc)
 
 # ── Install driver ────────────────────────────────────────────
