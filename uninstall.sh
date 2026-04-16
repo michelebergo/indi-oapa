@@ -1,6 +1,6 @@
 #!/bin/bash
 # ============================================================
-#  INDI-AAPA Uninstaller
+#  INDI-OAPA Uninstaller
 #  Removes all files installed by install.sh
 # ============================================================
 set -e
@@ -15,7 +15,7 @@ if [ "$EUID" -ne 0 ]; then
     exit 1
 fi
 
-echo -e "${YELLOW}Removing INDI-AAPA files...${NC}"
+echo -e "${YELLOW}Removing INDI-OAPA files...${NC}"
 
 FILES=(
     /usr/bin/indi_oapa_polaralignment

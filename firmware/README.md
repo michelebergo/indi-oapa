@@ -1,4 +1,4 @@
-# AAPA Firmware - Arduino ESP32
+# OAPA Firmware - Arduino ESP32
 
 ## Description
 
@@ -96,7 +96,7 @@ Y<steps>               # Move Y axis (azimuth)
    - TMCStepper (0.7.x) by teemuatlut
    - AccelStepper by Mike McCauley
 
-4. Open `aapa_control.ino`
+4. Open `oapa_control.ino`
 5. Select **Tools → Board → ESP32 Dev Module**
 6. Select your COM port
 7. Click **Upload**

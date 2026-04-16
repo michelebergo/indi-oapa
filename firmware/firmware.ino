@@ -259,7 +259,7 @@ void setup() {
   stepperY.setMaxSpeed(2000); stepperY.setAcceleration(1000);
 
   Serial.println("\n--- FYSETC E4 READY ---");
-  Serial.println("AAPA System Initialized");
+  Serial.println("OAPA System Initialized");
   Serial.println("Send $H to home elevation axis");
   Serial.println("Azimuth: 360° free rotation (no homing)");
   Serial.println("Waiting for commands...");

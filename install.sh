@@ -1,6 +1,6 @@
 #!/bin/bash
 # ============================================================
-#  INDI-AAPA Installer
+#  INDI-OAPA Installer
 #  One-click build & install for Debian/Ubuntu/Raspberry Pi OS
 # ============================================================
 set -e
@@ -14,7 +14,7 @@ YELLOW='\033[1;33m'
 NC='\033[0m'
 
 echo -e "${GREEN}╔══════════════════════════════════════════╗${NC}"
-echo -e "${GREEN}║   INDI-AAPA Installer                    ║${NC}"
+echo -e "${GREEN}║   INDI-OAPA Installer                    ║${NC}"
 echo -e "${GREEN}╚══════════════════════════════════════════╝${NC}"
 echo ""
 

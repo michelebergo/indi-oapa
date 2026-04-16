@@ -1,6 +1,6 @@
 #!/bin/bash
 # ============================================================
-#  INDI-AAPA Deep Stress Test
+#  INDI-OAPA Deep Stress Test
 #  Exercises the driver under heavy load, edge cases, and
 #  monitors for crashes, memory leaks, and protocol errors.
 # ============================================================
@@ -82,7 +82,7 @@ wait_for_property() {
 
 # ── Pre-flight checks ────────────────────────────────────────
 > "$LOG_FILE"
-header "INDI-AAPA Deep Stress Test"
+header "INDI-OAPA Deep Stress Test"
 log "Date: $(date)"
 log "System: $(cat /sys/firmware/devicetree/base/model 2>/dev/null)"
 log "CPU temp (idle): $(get_temp)°C"
@@ -115,7 +115,7 @@ sleep 1
 # ══════════════════════════════════════════════════════════════
 header "TEST 1: Server Startup & Driver Loading"
 
-log "Starting indiserver with AAPA driver..."
+log "Starting indiserver with OAPA driver..."
 indiserver -p $INDI_PORT "$DRIVER_BIN" > "$INDI_LOG" 2>&1 &
 INDI_PID=$!
 sleep 3
@@ -161,10 +161,10 @@ sleep 4  # allow Arduino reset + handshake
 
 CONN_STATE=$(indi_getprop -1 -t 3 -p $INDI_PORT "$DEVICE.CONNECTION.CONNECT" 2>/dev/null)
 if [[ "$CONN_STATE" == *"On"* ]]; then
-    pass "Connected to AAPA hardware"
+    pass "Connected to OAPA hardware"
     HARDWARE_CONNECTED=1
 else
-    warn "Could not connect to hardware (AAPA may not be plugged in)"
+    warn "Could not connect to hardware (OAPA may not be plugged in)"
     HARDWARE_CONNECTED=0
 fi
 
@@ -359,7 +359,7 @@ for client in $(seq 1 5); do
             indi_getprop -t 1 -p $INDI_PORT "$DEVICE.*" &>/dev/null
             ((count++))
         done
-        echo "$count" > "/tmp/aapa_client_${client}.count"
+        echo "$count" > "/tmp/oapa_client_${client}.count"
     ) &
     PIDS="$PIDS $!"
 done
@@ -369,10 +369,10 @@ wait $PIDS 2>/dev/null
 
 TOTAL_CONCURRENT=0
 for client in $(seq 1 5); do
-    if [ -f "/tmp/aapa_client_${client}.count" ]; then
-        C=$(cat "/tmp/aapa_client_${client}.count")
+    if [ -f "/tmp/oapa_client_${client}.count" ]; then
+        C=$(cat "/tmp/oapa_client_${client}.count")
         TOTAL_CONCURRENT=$((TOTAL_CONCURRENT + C))
-        rm -f "/tmp/aapa_client_${client}.count"
+        rm -f "/tmp/oapa_client_${client}.count"
     fi
 done
 

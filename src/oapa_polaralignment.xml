@@ -2,9 +2,9 @@
 <driversList>
     <devGroup group="Auxiliary">
         <device label="OAPA Polar Alignment" manufacturer="OAPA">
-            <driver name="AAPA polar alignment driver">indi_oapa_polaralignment</driver>
+            <driver name="OAPA polar alignment driver">indi_oapa_polaralignment</driver>
             <version>1.0</version>
-            <description>Driver for the AAPA Automated Polar Alignment system</description>
+            <description>Driver for the OAPA Automated Polar Alignment system</description>
         </device>
     </devGroup>
 </driversList>

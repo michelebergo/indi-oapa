@@ -1,12 +1,12 @@
 #!/bin/bash
-# AAPA Closed-Loop Polar Alignment Automation Script
+# OAPA Closed-Loop Polar Alignment Automation Script
 # Supports three modes:
 #   Default (--no-daemon)  : auto loop via KStars D-Bus (fully independent)
 #   --correct <az> <alt>   : one-shot correction in arcseconds
 #   --interactive           : interactive loop (type values from Ekos screen)
 
 INDI_PORT=7624
-AAPA_DEVICE="OAPA Polar Alignment"
+OAPA_DEVICE="OAPA Polar Alignment"
 DBUS_ADDR="unix:path=/run/user/1000/bus"
 
 # Threshold in arcseconds. Stop correcting if error is below this.
@@ -19,7 +19,7 @@ send_paa_correction() {
     local az_deg=$1
     local alt_deg=$2
     echo "  → Sending PAA correction: Az=${az_deg}°  Alt=${alt_deg}°"
-    indi_setprop -p $INDI_PORT "${AAPA_DEVICE}.OAPA_PAA_ERROR.AZ_ERR=${az_deg};ALT_ERR=${alt_deg}"
+    indi_setprop -p $INDI_PORT "${OAPA_DEVICE}.OAPA_PAA_ERROR.AZ_ERR=${az_deg};ALT_ERR=${alt_deg}"
 }
 
 # ─────────────────────────────────────────────
@@ -62,7 +62,7 @@ if [[ "$1" == "--correct" ]]; then
     ALT_ARCSEC=${3:-0}
     AZ_DEG=$(awk  -v a="$AZ_ARCSEC"  'BEGIN{printf "%.6f", a/3600}')
     ALT_DEG=$(awk -v a="$ALT_ARCSEC" 'BEGIN{printf "%.6f", a/3600}')
-    echo "AAPA PAA One-Shot Correction"
+    echo "OAPA PAA One-Shot Correction"
     echo "  Input: Az=${AZ_ARCSEC}\"  Alt=${ALT_ARCSEC}\""
     send_paa_correction "$AZ_DEG" "$ALT_DEG"
     echo "Done."
@@ -73,7 +73,7 @@ fi
 # Mode: --interactive
 # ─────────────────────────────────────────────
 if [[ "$1" == "--interactive" ]]; then
-    echo "AAPA Interactive PAA Correction Loop"
+    echo "OAPA Interactive PAA Correction Loop"
     echo "After each Ekos solve, type the Az/Alt arcsecond values shown in the Ekos PAA screen."
     echo "Use negative for opposite direction. Enter 0 to stop."
     while true; do
@@ -95,12 +95,12 @@ fi
 # Mode: --no-daemon (default auto loop via D-Bus)
 # ─────────────────────────────────────────────
 if [[ "$1" != "--no-daemon" ]]; then
-    echo "AAPA Automation: Backgrounding loop..."
+    echo "OAPA Automation: Backgrounding loop..."
     nohup $0 --no-daemon </dev/null >/tmp/oapa_automation.log 2>&1 &
     exit 0
 fi
 
-echo "Starting AAPA Auto Closed-Loop Automation (D-Bus mode)..."
+echo "Starting OAPA Auto Closed-Loop Automation (D-Bus mode)..."
 echo "Waiting 10 seconds for Ekos to finish establishing its connections..."
 sleep 10
 echo "Monitoring KStars Align log for PAA solution..."

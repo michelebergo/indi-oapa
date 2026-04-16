@@ -1,6 +1,6 @@
-# INDI AAPA — Astrophilos Astronomical Polar Alignment
+# INDI OAPA — Astrophilos Astronomical Polar Alignment
 
-An [INDI](https://www.indilib.org/) driver for the **AAPA** (Automated Astronomical Polar Alignment) device — a motorised altitude/azimuth adjustment system built with Arduino + Grbl that lets you polar-align an equatorial mount without touching the knobs.
+An [INDI](https://www.indilib.org/) driver for the **OAPA** (Automated Astronomical Polar Alignment) device — a motorised altitude/azimuth adjustment system built with Arduino + Grbl that lets you polar-align an equatorial mount without touching the knobs.
 
 > **⚠️ Beta Software** — This driver is under active development. Please report any issues on the [GitHub Issues](https://github.com/michelebergo/indi-oapa/issues) page.
 
@@ -22,7 +22,7 @@ An [INDI](https://www.indilib.org/) driver for the **AAPA** (Automated Astronomi
 
 | Component | Details |
 |-----------|---------|
-| **AAPA Device** | Motorised alt/az adjustment platform |
+| **OAPA Device** | Motorised alt/az adjustment platform |
 | **Controller** | Arduino (Uno/Nano) running Grbl 1.1 firmware |
 | **Connection** | USB serial (typically `/dev/ttyUSB0`) |
 | **Computer** | Raspberry Pi or Linux PC running INDI / KStars+Ekos |
@@ -41,7 +41,7 @@ sudo apt update
 sudo apt install indi-bin libindi-dev
 ```
 
-### Install the AAPA Driver
+### Install the OAPA Driver
 
 ```bash
 git clone https://github.com/michelebergo/indi-oapa.git
@@ -113,7 +113,7 @@ THRESHOLD_DEG=0.01
 ## Calibrating Steps-Per-Degree
 
 1. Use Ekos Polar Alignment to measure the current error (e.g. 0.5° in azimuth)
-2. Manually jog the AAPA by a known amount (e.g. 25 units)
+2. Manually jog the OAPA by a known amount (e.g. 25 units)
 3. Re-solve and measure the new error
 4. Calculate: `STEPS_PER_DEG = jog_units / degrees_corrected`
 5. Set the values in the driver's **Calibration** property (or in the script for legacy mode)
