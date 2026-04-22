@@ -1,6 +1,6 @@
-# INDI OAPA — Astrophilos Astronomical Polar Alignment
+# INDI OAPA — Open Automatic Polar Alignment
 
-An [INDI](https://www.indilib.org/) driver for the **OAPA** (Automated Astronomical Polar Alignment) device — a motorised altitude/azimuth adjustment system built with Arduino + Grbl that lets you polar-align an equatorial mount without touching the knobs.
+An [INDI](https://www.indilib.org/) driver for the **OAPA** (Open Automatic Polar Alignment) device — a motorised altitude/azimuth adjustment system built with Arduino + Grbl that lets you polar-align an equatorial mount without touching the knobs.
 
 > **⚠️ Beta Software** — This driver is under active development. Please report any issues on the [GitHub Issues](https://github.com/michelebergo/indi-oapa/issues) page.
 
