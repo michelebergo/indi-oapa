@@ -1,29 +1,22 @@
-cmake_minimum_required(VERSION 3.10)
-project(indi-oapa C CXX)
+cmake_minimum_required(VERSION 3.16)
+project(indi-oapa CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# Add current dir to module path to find FindINDI.cmake
-set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}")
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}")
 
-find_package(INDI REQUIRED)
+find_package(INDI 2.2 COMPONENTS driver REQUIRED)
 
-if(INDI_FOUND)
-    message(STATUS "Found INDI: ${INDI_INCLUDE_DIR}")
-    include_directories(${INDI_INCLUDE_DIR})
-else()
-    message(FATAL_ERROR "INDI library not found!")
+# The PAC interface that Ekos drives appeared in INDI 2.2.0.
+if(NOT EXISTS "${INDI_INCLUDE_DIR}/indipacinterface.h")
+    message(FATAL_ERROR "INDI ${INDI_VERSION} has no PAC interface (indipacinterface.h). INDI >= 2.2.0 is required.")
 endif()
 
-set(OAPA_SRCS
-    src/oapa_driver.cpp
-)
+include_directories(${INDI_INCLUDE_DIR})
 
-add_executable(indi_oapa_polaralignment ${OAPA_SRCS})
+add_executable(indi_oapa src/oapa.cpp)
+target_link_libraries(indi_oapa ${INDI_LIBRARIES})
 
-# INDI drivers often need nova and curl
-target_link_libraries(indi_oapa_polaralignment ${INDI_LIBRARIES} m)
-
-install(TARGETS indi_oapa_polaralignment RUNTIME DESTINATION bin)
-install(FILES src/oapa_polaralignment.xml DESTINATION share/indi RENAME indi_oapa_polaralignment.xml)
+install(TARGETS indi_oapa RUNTIME DESTINATION bin)
+install(FILES src/indi_oapa.xml DESTINATION share/indi)
