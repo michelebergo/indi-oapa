@@ -50,11 +50,11 @@ the files of driver 1.x if present. To remove everything: `sudo ./uninstall.sh`.
    the driver never guesses a gear ratio.
 4. Do the **direction check** (see below) once.
 5. In the Polar Alignment Assistant, enable automatic PAC correction and choose the success
-   threshold.
+   threshold (Align → Options). The default is 30′, which stops early: lower it, e.g. to 1′.
 
 | Control | Meaning |
 |---------|---------|
-| **Manual Adjustment** | Relative move in degrees. AZ positive = East, ALT positive = North |
+| **Manual Adjustment** | Relative move in **degrees**, range ±10 (e.g. `0.5`). AZ positive = East, ALT positive = North |
 | **Abort Motion** | Stops both axes |
 | **Position** | Platform position in degrees since power-on |
 | **Speed** | Motor speed per axis, 50–3000 steps/s (default 1000) |
@@ -104,6 +104,11 @@ per-axis speed, reverse, rounding to whole steps, abort, stall detection, and ol
 ```bash
 tests/pac_contract_test.sh /path/to/indi_oapa
 ```
+
+The full Ekos loop has also been run with KStars 3.8.4 against the INDI Telescope and CCD
+Simulators and a real OAPA board (firmware 1.3.0): with the telescope simulator's
+*Polar Alignment Corrector* set to `OAPA`, Ekos measured the error, sent two corrections that
+the board executed, and reported success. A test under the real sky is still pending.
 
 ---
 
