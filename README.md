@@ -52,7 +52,9 @@ the files of driver 1.x if present. To remove everything: `sudo ./uninstall.sh`.
    **Connect**. The board resets when the port opens; the driver waits for it.
    For a board on WiFi (firmware 1.3.0 or newer), set the connection mode to **TCP** and
    enter its address and port 2323 instead; the board accepts one client at a time, so
-   close the board's other clients first.
+   close the board's other clients first. The address is the one shown at the bottom of
+   the board's own page: from firmware 1.3.6 each board has its own name, such as
+   `oapa-a1b2c3.local`.
 3. Set **Calibration** for both axes (see below). Until you do, every correction is refused:
    the driver never guesses a gear ratio.
 4. Do the **direction check** (see below) once.
