@@ -3,7 +3,7 @@
     <devGroup group="Auxiliary">
         <device label="OAPA" manufacturer="MBAstro">
             <driver name="OAPA">indi_oapa</driver>
-            <version>3.0</version>
+            <version>3.1</version>
         </device>
     </devGroup>
 </driversList>

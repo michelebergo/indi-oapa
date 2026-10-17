@@ -15,6 +15,7 @@ set -u
 HERE="$(cd "$(dirname "$0")" && pwd)"
 DRIVER="${1:-indi_oapa}"
 PORT=7625
+TCP_PORT=7626
 DEV="OAPA"
 LINK="/tmp/ttyOAPA_test"
 WORK="$(mktemp -d)"
@@ -63,6 +64,15 @@ start_fake() {
     echo "fake firmware did not start"; cat "$WORK/fake.log"; exit 2
 }
 
+# Same firmware on a socket, as boards with WiFi serve it from firmware 1.3.0 on.
+start_fake_tcp() {
+    [ -n "$FAKE_PID" ] && kill "$FAKE_PID" 2>/dev/null && wait "$FAKE_PID" 2>/dev/null
+    python3 "$HERE/fake_oapa_firmware.py" --tcp "$TCP_PORT" "$@" > "$WORK/fake.log" 2>&1 &
+    FAKE_PID=$!
+    for _ in $(seq 50); do grep -q READY "$WORK/fake.log" && return 0; sleep 0.1; done
+    echo "fake firmware did not start on TCP"; cat "$WORK/fake.log"; exit 2
+}
+
 connect() {
     setprop "DEVICE_PORT.PORT=$LINK"
     setprop "CONNECTION.CONNECT=On"
@@ -88,11 +98,22 @@ export HOME="$WORK"
 
 start_fake
 mkfifo "$FIFO"
-indiserver -p $PORT -f "$FIFO" > "$WORK/server.log" 2>&1 &
+# -u: INDI also binds one local socket whose default path is shared by every
+# indiserver on the machine, so without a private path this run dies with
+# "Local server: bind: Address already in use" whenever another server is up.
+indiserver -p $PORT -u "/tmp/indiserver-oapa-test-$$" -f "$FIFO" > "$WORK/server.log" 2>&1 &
 SERVER_PID=$!
 sleep 1
+# Checked before writing to the FIFO: that write blocks forever when no server is
+# reading it, which would hang the run with no output at all.
+if ! kill -0 "$SERVER_PID" 2>/dev/null; then
+    echo "indiserver did not start on port $PORT"; cat "$WORK/server.log"; exit 2
+fi
 echo "start $DRIVER" > "$FIFO"
 for _ in $(seq 50); do getprop "CONNECTION.CONNECT" >/dev/null && break; sleep 0.1; done
+if ! getprop "CONNECTION.CONNECT" >/dev/null; then
+    echo "driver did not come up on port $PORT"; cat "$WORK/server.log"; exit 2
+fi
 
 # 1. Connect: handshake survives the boot banner, firmware version is read.
 connect && pass "connect through boot banner" || fail "connect through boot banner"
@@ -229,6 +250,31 @@ connect && pass "connect without V: field" || fail "connect without V: field"
 [ "$(getprop FIRMWARE_INFO.VERSION)" = "Unknown" ] \
     && pass "missing version shown as Unknown" || fail "missing version shown as Unknown: $(getprop FIRMWARE_INFO.VERSION)"
 disconnect
+
+# 12. TCP: a board on WiFi (firmware >= 1.3.0) answers the same protocol on a socket.
+start_fake_tcp --version 1.3.5
+setprop "CONNECTION_MODE.CONNECTION_TCP=On"
+setprop "DEVICE_ADDRESS.ADDRESS=127.0.0.1;PORT=$TCP_PORT"
+setprop "CONNECTION.CONNECT=On"
+wait_state CONNECTION 15 Ok && pass "connect over TCP" || fail "connect over TCP: $(state CONNECTION)"
+[ "$(getprop FIRMWARE_INFO.VERSION)" = "1.3.5" ] \
+    && pass "firmware 1.3.5 read over TCP" || fail "firmware 1.3.5 read over TCP: $(getprop FIRMWARE_INFO.VERSION)"
+# Values, not just the four commands: by now the run has changed them, and what matters
+# here is that a TCP connection pushes the same settings a serial one does.
+if wait_wire 'CMD HY[0-9]' 5 && wire 'CMD CX[0-9]' && wire 'CMD HX[0-9]' && wire 'CMD CY[0-9]'; then
+    pass "TCP connect pushes run/hold current"
+else
+    fail "TCP connect pushes run/hold current: $(wire_lines 'CMD [CH][XY]')"
+fi
+setprop "OAPA_STEPS_PER_ARCMIN.STEPS_AZ=100;STEPS_ALT=100"
+clear_wire
+setprop "PAC_MANUAL_ADJUSTMENT.MANUAL_AZ_STEP=0.1;MANUAL_ALT_STEP=-0.1"
+wait_wire 'CMD \$J=G91G21X600Y-600F3000' 5 \
+    && pass "TCP move reaches the wire" || fail "TCP move reaches the wire: $(wire_lines 'CMD \$J')"
+wait_state PAC_MANUAL_ADJUSTMENT 15 Ok \
+    && pass "TCP move completes Ok" || fail "TCP move completes Ok: $(state PAC_MANUAL_ADJUSTMENT)"
+disconnect
+setprop "CONNECTION_MODE.CONNECTION_SERIAL=On"
 
 echo
 [ $FAILS -eq 0 ] && echo "ALL PASS" || echo "$FAILS FAILURE(S)"

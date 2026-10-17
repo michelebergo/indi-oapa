@@ -20,11 +20,15 @@ therefore measure the error, command the correction and measure again, automatic
 | **INDI** | **2.2.0 or newer** (the PAC interface does not exist in older versions) |
 | **KStars / Ekos** | **3.8.2 or newer** for automatic correction (marked preliminary in 3.8.2). Older versions can still drive the platform manually through the INDI Control Panel |
 | **Controller** | ESP32 board (reference: FYSETC E4 + 2× TMC2209) |
-| **Firmware** | [OAPA firmware](https://github.com/michelebergo/oapa-firmware) **1.2.1 or newer** (1.2.2 recommended) |
-| **Connection** | USB serial, 115200 baud (`/dev/ttyUSB0` or `/dev/ttyACM0`) |
+| **Firmware** | [OAPA firmware](https://github.com/michelebergo/oapa-firmware) **1.2.1 or newer** (current release 1.3.5) |
+| **Connection** | USB serial, 115200 baud (`/dev/ttyUSB0` or `/dev/ttyACM0`), or TCP on port 2323 with firmware 1.3.0 or newer |
 
 With firmware older than 1.2.1 the driver still connects, but speed and Abort are ignored
 and a warning is logged.
+
+Firmware 1.3.x also aligns on its own when a host feeds it the polar error, as the N.I.N.A.
+plugin can. This driver does not use that: in Ekos the correction loop is Ekos's own, and the
+driver only moves the platform when asked.
 
 ---
 
@@ -46,6 +50,9 @@ the files of driver 1.x if present. To remove everything: `sudo ./uninstall.sh`.
 1. **Profile Editor** → Auxiliary → select **OAPA**.
 2. **INDI Control Panel** → OAPA → **Connection** tab: choose the serial port, click
    **Connect**. The board resets when the port opens; the driver waits for it.
+   For a board on WiFi (firmware 1.3.0 or newer), set the connection mode to **TCP** and
+   enter its address and port 2323 instead; the board accepts one client at a time, so
+   close the board's other clients first.
 3. Set **Calibration** for both axes (see below). Until you do, every correction is refused:
    the driver never guesses a gear ratio.
 4. Do the **direction check** (see below) once.

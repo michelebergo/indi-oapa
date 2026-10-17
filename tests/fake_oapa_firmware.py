@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fake OAPA controller on a pseudo-terminal, mirroring reference firmware 1.2.2.
+"""Fake OAPA controller on a pseudo-terminal or a TCP port, mirroring reference firmware 1.2.2.
 
 Used to test the INDI driver without hardware. Behaviour copied from
 oapa-firmware oapa.ino 1.2.2:
@@ -16,6 +16,9 @@ Options let a test provoke the failure paths the driver must catch:
   --stall    report Run forever without the position ever changing
   --ignore-stop  acknowledge "!" but keep moving (pre-1.2.1 firmware)
 
+With --tcp the same protocol is served on a TCP port instead of a pty, one client
+at a time, as firmware 1.3.0 and newer do on port 2323.
+
 Every received command is echoed to stdout as "CMD <line>" and every completed
 state change as "POS x y", so a test can assert on what reached the wire.
 """
@@ -23,6 +26,7 @@ import argparse
 import os
 import pty
 import select
+import socket
 import sys
 import time
 import tty
@@ -133,13 +137,76 @@ class Firmware:
         return ["ok"]
 
 
+def serve(fw, fd, state):
+    """Run the firmware on one open link until the peer closes it.
+
+    state carries the motion clock and the last reported position across links, so
+    a TCP client that reconnects finds the platform where it left it.
+    """
+    buffer = b""
+    while True:
+        readable, _, _ = select.select([fd], [], [], 0.02)
+        now = time.monotonic()
+        fw.advance(now - state["last"])
+        state["last"] = now
+
+        pos = tuple(round(a.position) for a in fw.axes.values())
+        if pos != state["pos"] and not any(a.running() for a in fw.axes.values()):
+            print(f"POS {pos[0]} {pos[1]}", flush=True)
+            state["pos"] = pos
+
+        if not readable:
+            continue
+        try:
+            chunk = os.read(fd, 1024)
+        except OSError:
+            if state["closes"]:
+                return
+            continue
+        if not chunk and state["closes"]:
+            return
+        buffer += chunk
+        while b"\n" in buffer or b"\r" in buffer:
+            cut = min(i for i in (buffer.find(b"\n"), buffer.find(b"\r")) if i >= 0)
+            line, buffer = buffer[:cut], buffer[cut + 1:]
+            for reply in fw.handle(line.decode(errors="replace")):
+                os.write(fd, reply.encode() + b"\r\n")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--link", required=True, help="symlink path to create for the pty, e.g. /tmp/ttyOAPA")
+    parser.add_argument("--link", help="symlink path to create for the pty, e.g. /tmp/ttyOAPA")
+    parser.add_argument("--tcp", type=int, help="serve on this TCP port instead of a pty, like firmware >= 1.3.0")
     parser.add_argument("--version", default="1.2.2")
     parser.add_argument("--stall", action="store_true")
     parser.add_argument("--ignore-stop", action="store_true")
     args = parser.parse_args()
+    if bool(args.link) == bool(args.tcp):
+        parser.error("give either --link or --tcp")
+
+    fw = Firmware(args.version, args.stall, args.ignore_stop)
+    state = {"last": time.monotonic(), "pos": None, "closes": args.tcp is not None}
+
+    if args.tcp:
+        listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        listener.bind(("127.0.0.1", args.tcp))
+        listener.listen(1)
+        print(f"READY tcp:{args.tcp}", flush=True)
+        try:
+            while True:
+                conn, _ = listener.accept()
+                print("LINK open", flush=True)
+                try:
+                    serve(fw, conn.fileno(), state)
+                finally:
+                    conn.close()
+                    print("LINK closed", flush=True)
+        except KeyboardInterrupt:
+            pass
+        finally:
+            listener.close()
+        return
 
     master, slave = pty.openpty()
     tty.setraw(master)
@@ -147,37 +214,10 @@ def main():
         os.remove(args.link)
     os.symlink(os.ttyname(slave), args.link)
 
-    fw = Firmware(args.version, args.stall, args.ignore_stop)
     os.write(master, b"\r\n--- OAPA controller ready ---\r\nfirmware fake | Waiting for commands...\r\n")
     print(f"READY {args.link}", flush=True)
-
-    buffer = b""
-    last = time.monotonic()
-    last_pos = None
     try:
-        while True:
-            readable, _, _ = select.select([master], [], [], 0.02)
-            now = time.monotonic()
-            fw.advance(now - last)
-            last = now
-
-            pos = tuple(round(a.position) for a in fw.axes.values())
-            if pos != last_pos and not any(a.running() for a in fw.axes.values()):
-                print(f"POS {pos[0]} {pos[1]}", flush=True)
-                last_pos = pos
-
-            if not readable:
-                continue
-            try:
-                chunk = os.read(master, 1024)
-            except OSError:
-                continue
-            buffer += chunk
-            while b"\n" in buffer or b"\r" in buffer:
-                cut = min(i for i in (buffer.find(b"\n"), buffer.find(b"\r")) if i >= 0)
-                line, buffer = buffer[:cut], buffer[cut + 1:]
-                for reply in fw.handle(line.decode(errors="replace")):
-                    os.write(master, reply.encode() + b"\r\n")
+        serve(fw, master, state)
     except KeyboardInterrupt:
         pass
     finally:
